@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+var nodeQS = require('qs');
+
 var XHR = XMLHttpRequest
 if (!XHR) throw new Error('missing XMLHttpRequest')
 request.log = {
@@ -78,7 +80,7 @@ function request(options, callback) {
     else if(typeof options.body !== 'string')
       options.body = JSON.stringify(options.body)
   }
-  
+
   //BEGIN QS Hack
   var serialize = function(obj) {
     var str = [];
@@ -88,9 +90,9 @@ function request(options, callback) {
       }
     return str.join("&");
   }
-  
+
   if(options.qs){
-    var qs = (typeof options.qs == 'string')? options.qs : serialize(options.qs);
+    var qs = (typeof options.qs == 'string')? options.qs : nodeQS.stringify(options.qs);
     if(options.uri.indexOf('?') !== -1){ //no get params
         options.uri = options.uri+'&'+qs;
     }else{ //existing get params
@@ -98,7 +100,7 @@ function request(options, callback) {
     }
   }
   //END QS Hack
-  
+
   //BEGIN FORM Hack
   var multipart = function(obj) {
     //todo: support file type (useful?)
@@ -121,7 +123,7 @@ function request(options, callback) {
     result.type = 'multipart/form-data; boundary='+result.boundry;
     return result;
   }
-  
+
   if(options.form){
     if(typeof options.form == 'string') throw('form name unsupported');
     if(options.method === 'POST'){
@@ -270,8 +272,12 @@ function run_xhr(options) {
 
     xhr.body = xhr.responseText
     if(options.json) {
-      try        { xhr.body = JSON.parse(xhr.responseText) }
-      catch (er) { return options.callback(er, xhr)        }
+      try {
+        xhr.body = (xhr.responseText) ? JSON.parse(xhr.responseText) : xhr.responseText;
+      }
+      catch (er) {
+        return options.callback(er, xhr)
+      }
     }
 
     options.callback(null, xhr, xhr.body)
@@ -281,6 +287,37 @@ function run_xhr(options) {
 
 request.withCredentials = false;
 request.DEFAULT_TIMEOUT = DEFAULT_TIMEOUT;
+
+var shortcuts = [
+  'get',
+  'post',
+  'put',
+  'head',
+  'del',
+  'options',
+  'trace',
+  'copy',
+  'lock',
+  'mkcol',
+  'move',
+  'purge',
+  'propfind',
+  'proppatch',
+  'unlock',
+  'report',
+  'mkactivity',
+  'checkout',
+  'merge',
+  'm-search',
+  'notify',
+  'subscribe',
+  'unsubscribe',
+  'patch',
+  'search'
+];
+var shortcutsToMethods = {
+  'del': 'delete'
+};
 
 //
 // defaults
@@ -302,10 +339,9 @@ request.defaults = function(options, requester) {
     return d
   }
   var de = def(request)
-  de.get = def(request.get)
-  de.post = def(request.post)
-  de.put = def(request.put)
-  de.head = def(request.head)
+  shortcuts.forEach(function (method) {
+    de[method] = def(request[method])
+  })
   return de
 }
 
@@ -313,9 +349,9 @@ request.defaults = function(options, requester) {
 // HTTP method shortcuts
 //
 
-var shortcuts = [ 'get', 'put', 'post', 'head' ];
 shortcuts.forEach(function(shortcut) {
-  var method = shortcut.toUpperCase();
+  var method = shortcutsToMethods[shortcut] || shortcut;
+  method     = method.toUpperCase();
   var func   = shortcut.toLowerCase();
 
   request[func] = function(opts) {
